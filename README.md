@@ -1,3 +1,0 @@
-# altarspace.info
-
-site
