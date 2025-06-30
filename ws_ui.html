@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WebSocket Control Dashboard</title>
+  <style>
+    #xyPad {
+      width: 200px; height: 200px;
+      border: 1px solid #000;
+      position: relative;
+      background: #eee;
+      margin-bottom: 20px;
+    }
+    #xyIndicator {
+      width: 10px; height: 10px;
+      background: red;
+      border-radius: 50%;
+      position: absolute;
+      pointer-events: none;
+    }
+    .control-block {
+      margin-bottom: 20px;
+    }
+    #status {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>WebSocket Control Dashboard</h1>
+
+  <div class="control-block">
+    <label>IP: <input type="text" id="wsIp" value="144.6.187.203"></label>
+    <label>Port: <input type="text" id="wsPort" value="8080"></label>
+    <button onclick="connectWS()">Connect</button>
+    <button onclick="closeWS()">Disconnect</button>
+    <div>Status: <span id="status">Not connected</span></div>
+    <div>Connections: <span id="connections">0</span></div>
+  </div>
+
+  <div class="control-block">
+    <h3>Text Input</h3>
+    Name: <input type="text" id="textInputId" value="message">
+    <br>
+    <input type="text" id="textInput" placeholder="Type message">
+    <button onclick="sendText()">Send Text</button>
+  </div>
+
+  <div class="control-block">
+    <h3>Slider (0–1)</h3>
+    Name: <input type="text" id="sliderId" value="level">
+    <br>
+    <input type="range" id="slider" min="0" max="1" step="0.01" value="0.5" oninput="sendSlider()">
+    <span id="sliderValue">0.5</span>
+  </div>
+
+  <div class="control-block">
+    <h3>Momentary Button</h3>
+    Name: <input type="text" id="momentaryId" value="trigger">
+    <br>
+    <button id="momentary"
+            onmousedown="sendMomentary(true)"
+            onmouseup="sendMomentary(false)">Press</button>
+  </div>
+
+  <div class="control-block">
+    <h3>Toggle Button</h3>
+    Name: <input type="text" id="toggleId" value="switch">
+    <br>
+    <button id="toggle" onclick="toggleBtn()">Toggle OFF</button>
+  </div>
+
+  <div class="control-block">
+    <h3>X-Y Pad</h3>
+    Name: <input type="text" id="xyId" value="position">
+    <br>
+    <div id="xyPad" onmousemove="updateXY(event)" onmousedown="xyActive=true" onmouseup="xyActive=false">
+      <div id="xyIndicator"></div>
+    </div>
+  </div>
+
+  <h3>Log</h3>
+  <pre id="log"></pre>
+
+  <script>
+    let ws = null;
+    let xyActive = false;
+    let toggleState = false;
+
+    function connectWS() {
+      const ip = document.getElementById('wsIp').value;
+      const port = document.getElementById('wsPort').value;
+      const url = `ws://${ip}:${port}`;
+
+      if (ws) ws.close();
+
+      ws = new WebSocket(url);
+      ws.onopen = () => {
+        updateStatus('Connected');
+      };
+      ws.onclose = () => {
+        updateStatus('Closed');
+        updateConnections(0);
+      };
+      ws.onerror = (err) => {
+        console.error('WebSocket error:', err);
+        updateStatus('Error');
+      };
+      ws.onmessage = (msg) => {
+        log('Received: ' + msg.data);
+        // optional: expect server to send {"connections": n}
+        try {
+          const data = JSON.parse(msg.data);
+          if ('connections' in data) {
+            updateConnections(data.connections);
+          }
+        } catch (e) {
+          // ignore if not valid json or not relevant
+        }
+      };
+    }
+
+    function closeWS() {
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+    }
+
+    function updateStatus(text) {
+      document.getElementById('status').textContent = text;
+    }
+
+    function updateConnections(n) {
+      document.getElementById('connections').textContent = n;
+    }
+
+    function log(msg) {
+      document.getElementById('log').textContent += msg + '\n';
+    }
+
+    function sendKV(name, value) {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        log('Cannot send: socket not connected');
+        return;
+      }
+      const payload = {};
+      payload[name] = value;
+      ws.send(JSON.stringify(payload));
+      log('Sent: ' + JSON.stringify(payload));
+    }
+
+    function sendText() {
+      const name = document.getElementById('textInputId').value || 'unnamed';
+      const value = document.getElementById('textInput').value;
+      sendKV(name, value);
+    }
+
+    function sendSlider() {
+      const name = document.getElementById('sliderId').value || 'unnamed';
+      const value = parseFloat(document.getElementById('slider').value);
+      document.getElementById('sliderValue').textContent = value.toFixed(2);
+      sendKV(name, value);
+    }
+
+    function sendMomentary(pressed) {
+      const name = document.getElementById('momentaryId').value || 'unnamed';
+      sendKV(name, pressed);
+    }
+
+    function toggleBtn() {
+      toggleState = !toggleState;
+      const name = document.getElementById('toggleId').value || 'unnamed';
+      document.getElementById('toggle').textContent = toggleState ? 'Toggle ON' : 'Toggle OFF';
+      sendKV(name, toggleState);
+    }
+
+    function updateXY(event) {
+      if (!xyActive) return;
+      const pad = document.getElementById('xyPad');
+      const rect = pad.getBoundingClientRect();
+      const x = (event.clientX - rect.left) / rect.width;
+      const y = (event.clientY - rect.top) / rect.height;
+
+      const ind = document.getElementById('xyIndicator');
+      ind.style.left = `${x * rect.width - 5}px`;
+      ind.style.top = `${y * rect.height - 5}px`;
+
+      const name = document.getElementById('xyId').value || 'unnamed';
+      sendKV(name, { x, y });
+    }
+  </script>
+</body>
+</html>
