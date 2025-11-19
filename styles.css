@@ -22,8 +22,8 @@ body {
 }
 
 body > img, main {
-    width: 66vw;
-    max-width: 666px;
+    width: 60vw;
+    max-width: 600px;
 }
 
 footer {
